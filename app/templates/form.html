@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}{{ "Filament bewerken" if filament else "Filament toevoegen" }} · {{ settings.app_title }}{% endblock %}
+{% macro err(name) -%}
+  {% if errors.get(name) %}<p class="field-error" id="err-{{ name }}">{{ errors[name] }}</p>{% endif %}
+{%- endmacro %}
+{% block content %}
+<div class="page-head">
+  <a class="back" href="/">← Dashboard</a>
+  <h1>{{ "Filament bewerken" if filament else "Filament toevoegen" }}</h1>
+</div>
+
+{% if errors %}
+<div class="alert" role="alert">Controleer de gemarkeerde velden.{% if errors.get("__all__") %} {{ errors["__all__"] }}{% endif %}</div>
+{% endif %}
+
+<form id="filament-form" class="filament-form" method="post"
+      action="{{ '/filaments/%d/edit' % filament.id if filament else '/filaments/new' }}" novalidate>
+  <div class="form-main">
+    <fieldset>
+      <legend>Basis</legend>
+      <div class="field">
+        <label>Materiaal</label>
+        <div class="chip-group" role="radiogroup" aria-label="Materiaal">
+          {% for m in settings.materials %}
+          <label class="chip"><input type="radio" name="material" value="{{ m }}" {% if (values.material or "")|upper == m %}checked{% endif %} required><span>{{ m }}</span></label>
+          {% endfor %}
+        </div>
+        {{ err("material") }}
+      </div>
+      <div class="field">
+        <label for="color_name">Kleurnaam</label>
+        <input id="color_name" name="color_name" type="text" maxlength="100" required placeholder="bv. Galaxy Black"
+               value="{{ values.color_name }}" {% if errors.get('color_name') %}aria-invalid="true"{% endif %}>
+        {{ err("color_name") }}
+      </div>
+      <label class="switch">
+        <input type="checkbox" name="transparent" {% if values.transparent %}checked{% endif %}>
+        <span class="switch-track"></span>
+        <span>Transparant filament</span>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Kleur</legend>
+      <div class="color-row">
+        <input type="color" id="hex-picker" name="hex" value="{{ hex }}" aria-label="Kies een kleur">
+        <div class="field">
+          <label for="hex-text">Hex</label>
+          <input id="hex-text" type="text" value="{{ hex | upper }}" maxlength="7" pattern="#?[0-9A-Fa-f]{6}" autocomplete="off" spellcheck="false">
+        </div>
+        {% for ch, label in [("r", "R"), ("g", "G"), ("b", "B")] %}
+        <div class="field field-rgb">
+          <label for="{{ ch }}">{{ label }}</label>
+          <input id="{{ ch }}" name="{{ ch }}" type="number" min="0" max="255" step="1" required value="{{ values[ch] }}"
+                 {% if errors.get(ch) %}aria-invalid="true"{% endif %}>
+        </div>
+        {% endfor %}
+      </div>
+      {{ err("r") }}{{ err("g") }}{{ err("b") }}
+      <div class="palette" aria-label="Veelgebruikte kleuren">
+        {% for name, hx in [("Zwart","#1b1b1f"),("Wit","#f4f4f2"),("Grijs","#8d8f94"),("Rood","#d62828"),("Oranje","#f77f00"),("Geel","#fcbf49"),("Groen","#2a9d4b"),("Blauw","#1d63d6"),("Paars","#7b2cbf"),("Roze","#ff70a6"),("Bruin","#7f5539"),("Naturel","#e8dcc2")] %}
+        <button type="button" class="palette-swatch" data-hex="{{ hx }}" data-name="{{ name }}" style="background: {{ hx }}" title="{{ name }}" aria-label="{{ name }}"></button>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Prijs en gewicht</legend>
+      <div class="field-grid">
+        <div class="field">
+          <label for="price_per_kg">Prijs per kilo</label>
+          <div class="input-prefix"><span>€</span>
+            <input id="price_per_kg" name="price_per_kg" type="text" inputmode="decimal" required placeholder="24,99"
+                   value="{{ values.price_per_kg | string | replace('.', ',') }}" {% if errors.get('price_per_kg') %}aria-invalid="true"{% endif %}>
+          </div>
+          {{ err("price_per_kg") }}
+        </div>
+        <div class="field">
+          <label for="weight_new">Gewicht nieuw</label>
+          <div class="input-suffix">
+            <input id="weight_new" name="weight_new" type="number" min="1" step="1" required value="{{ values.weight_new }}"
+                   {% if errors.get('weight_new') %}aria-invalid="true"{% endif %}><span>g</span>
+          </div>
+          {{ err("weight_new") }}
+        </div>
+        <div class="field">
+          <label for="weight_current">Gewicht nu</label>
+          <div class="input-suffix">
+            <input id="weight_current" name="weight_current" type="number" min="0" step="1" required value="{{ values.weight_current }}"
+                   {% if errors.get('weight_current') %}aria-invalid="true"{% endif %}><span>g</span>
+          </div>
+          {{ err("weight_current") }}
+        </div>
+      </div>
+      <p class="hint">Netto filamentgewicht, zonder de lege spoel.</p>
+    </fieldset>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">{{ "Wijzigingen opslaan" if filament else "Filament toevoegen" }}</button>
+      <a class="btn btn-ghost" href="/">Annuleren</a>
+    </div>
+  </div>
+
+  <aside class="form-preview" aria-label="Voorbeeld">
+    <div id="preview" class="preview-box"
+         hx-get="/preview" hx-include="#filament-form" hx-trigger="input from:#filament-form delay:60ms, change from:#filament-form, colorsync from:body">
+      {% set _pct = ((values.weight_current | int) / ((values.weight_new | int) or 1) * 100) if (values.weight_new | int) else 100 %}
+      {{ spool_svg(values.r | int, values.g | int, values.b | int, values.transparent, [[_pct, 0] | max, 100] | min, uid="preview", title="Voorbeeld", css_class="spool spool-lg") }}
+      <div class="preview-pct">{{ [[_pct, 0] | max, 100] | min | pct }} resterend</div>
+    </div>
+    <p class="hint center">Live voorbeeld van je spoel</p>
+  </aside>
+</form>
+
+{% if filament %}
+<form class="danger-zone" action="/filaments/{{ filament.id }}/delete" method="post"
+      data-confirm="Spoel &quot;{{ filament.color_name }}&quot; ({{ filament.material }}) definitief verwijderen?">
+  <div>
+    <strong>Spoel verwijderen</strong>
+    <p class="hint">Aangemaakt {{ filament.created_at | localdt("%d-%m-%Y") }} · laatst bijgewerkt {{ filament.updated_at | localdt }}</p>
+  </div>
+  <button class="btn btn-danger" type="submit">Verwijderen</button>
+</form>
+{% endif %}
+{% endblock %}

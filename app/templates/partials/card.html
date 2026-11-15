@@ -1,0 +1,47 @@
+{% set low = is_low_stock(f) %}
+<article id="filament-{{ f.id }}" class="card{% if low %} card-low{% endif %}{% if highlight %} card-highlight{% endif %}"
+         style="--fil: {{ f.hex }}">
+  {% if low %}<div class="low-ribbon" title="Minder dan {{ settings.low_stock_threshold | pct }} over">Bijna op</div>{% endif %}
+  <div class="card-spool">
+    {{ spool_svg(f.r, f.g, f.b, f.transparent, f.percent_remaining, uid=f.id, title=f.color_name ~ " — " ~ (f.percent_remaining | pct) ~ " resterend") }}
+  </div>
+  <div class="card-body">
+    <div class="card-badges">
+      <span class="badge badge-{{ f.material | lower }}">{{ f.material }}</span>
+      {% if f.transparent %}<span class="badge badge-transparent">Transparant</span>{% endif %}
+    </div>
+    <h2 class="card-title">{{ f.color_name }}</h2>
+    <div class="card-hex"><span class="swatch" style="background: {{ f.hex }}"></span><code>{{ f.hex | upper }}</code> <span class="rgb">rgb({{ f.r }}, {{ f.g }}, {{ f.b }})</span></div>
+
+    <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ f.percent_remaining }}" aria-label="Resterend">
+      <div class="meter-fill" style="width: {{ [f.percent_remaining, 100] | min }}%"></div>
+    </div>
+    <dl class="card-facts">
+      <div><dt>Gewicht</dt><dd>{{ f.weight_current | grams }} <span class="muted">/ {{ f.weight_new | grams }}</span></dd></div>
+      <div><dt>Resterend</dt><dd>{{ f.percent_remaining | pct }}</dd></div>
+      <div><dt>Waarde</dt><dd>{{ f.remaining_value | eur }}</dd></div>
+      <div><dt>Prijs/kg</dt><dd>{{ f.price_per_kg | eur }}</dd></div>
+    </dl>
+
+    <form class="quick-weight" action="/filaments/{{ f.id }}/weight" method="post"
+          hx-post="/filaments/{{ f.id }}/weight" hx-target="#filament-{{ f.id }}" hx-swap="outerHTML">
+      <label for="w-{{ f.id }}">Gewicht nu</label>
+      <div class="input-suffix">
+        <input id="w-{{ f.id }}" name="weight_current" type="number" inputmode="numeric" min="0" max="{{ f.weight_new }}"
+               step="1" value="{{ f.weight_current }}" required>
+        <span>g</span>
+      </div>
+      <button class="btn btn-small" type="submit">Opslaan</button>
+      {% if weight_error %}<p class="field-error" role="alert">{{ weight_error }}</p>{% endif %}
+    </form>
+
+    <div class="card-actions">
+      <a class="btn btn-small btn-ghost" href="/filaments/{{ f.id }}/edit">Bewerken</a>
+      <form action="/filaments/{{ f.id }}/delete" method="post" data-confirm="Spoel &quot;{{ f.color_name }}&quot; ({{ f.material }}) verwijderen?">
+        <button class="btn btn-small btn-ghost btn-danger-text" type="submit"
+                hx-delete="/filaments/{{ f.id }}" hx-target="#filament-{{ f.id }}" hx-swap="outerHTML swap:200ms"
+                hx-confirm="Spoel &quot;{{ f.color_name }}&quot; ({{ f.material }}) verwijderen?">Verwijderen</button>
+      </form>
+    </div>
+  </div>
+</article>

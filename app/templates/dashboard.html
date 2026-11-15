@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "partials/stats.html" %}
+
+<form id="filters" class="filters" action="/" method="get"
+      hx-get="/" hx-target="#inventory" hx-swap="outerHTML" hx-push-url="true" hx-trigger="change">
+  <div class="chip-group" role="radiogroup" aria-label="Materiaal">
+    <label class="chip"><input type="radio" name="material" value="" {% if not filters.material %}checked{% endif %}><span>Alles</span></label>
+    {% for m in settings.materials %}
+    <label class="chip"><input type="radio" name="material" value="{{ m }}" {% if filters.material == m %}checked{% endif %}><span>{{ m }}</span></label>
+    {% endfor %}
+  </div>
+  <div class="filter-selects">
+    <label>
+      <span class="sr-only">Transparantie</span>
+      <select name="transparent">
+        <option value="" {% if filters.transparent == "" %}selected{% endif %}>Alle soorten</option>
+        <option value="false" {% if filters.transparent == "false" %}selected{% endif %}>Niet transparant</option>
+        <option value="true" {% if filters.transparent == "true" %}selected{% endif %}>Transparant</option>
+      </select>
+    </label>
+    <label>
+      <span class="sr-only">Sorteren</span>
+      <select name="sort">
+        {% for key, label in sort_options.items() %}
+        <option value="{{ key }}" {% if filters.sort == key %}selected{% endif %}>Sorteer: {{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <noscript><button class="btn" type="submit">Filter</button></noscript>
+  </div>
+</form>
+
+{% include "partials/inventory.html" %}
+{% endblock %}

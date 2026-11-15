@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ settings.app_title }}{% endblock %}</title>
+  <script>
+    // Thema zo vroeg mogelijk zetten om flitsen te voorkomen
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem("fm-theme"); } catch (e) {}
+      if (!t) t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+  <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
+  <script src="{{ url_for('static', path='htmx.min.js') }}" defer></script>
+  <script src="{{ url_for('static', path='app.js') }}" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      {{ spool_svg(255, 140, 0, False, 80, uid="logo", css_class="spool spool-logo") }}
+      <span>{{ settings.app_title }}</span>
+    </a>
+    <nav class="topnav">
+      <a class="btn btn-primary" href="/filaments/new">+ <span class="hide-sm">Filament</span> toevoegen</a>
+      <button class="btn btn-icon" type="button" id="theme-toggle" aria-label="Wissel licht/donker thema" title="Licht/donker thema">
+        <span class="icon-sun">☀︎</span><span class="icon-moon">☾</span>
+      </button>
+    </nav>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <a href="/docs">API-documentatie</a> · <span>{{ settings.app_title }}</span>
+  </footer>
+
+  <dialog id="confirm-dialog" class="dialog">
+    <form method="dialog">
+      <p id="confirm-text">Weet je het zeker?</p>
+      <div class="dialog-actions">
+        <button class="btn" value="cancel">Annuleren</button>
+        <button class="btn btn-danger" value="ok" id="confirm-ok">Verwijderen</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

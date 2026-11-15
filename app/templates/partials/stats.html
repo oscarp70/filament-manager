@@ -1,0 +1,33 @@
+<section id="stats" class="stats" aria-label="Voorraadoverzicht" {% if oob or oob_stats %}hx-swap-oob="true"{% endif %}>
+  <div class="stat">
+    <div class="stat-label">Spoelen</div>
+    <div class="stat-value">{{ stats.count }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Totaal op voorraad</div>
+    <div class="stat-value">{{ stats.weight_g | kg }}</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">Voorraadwaarde</div>
+    <div class="stat-value">{{ stats.value | eur }}</div>
+  </div>
+  <div class="stat {% if stats.low_stock_count %}stat-warn{% endif %}">
+    <div class="stat-label">Bijna op (&lt; {{ stats.low_stock_threshold | pct }})</div>
+    <div class="stat-value">{{ stats.low_stock_count }}</div>
+  </div>
+  <div class="stat stat-wide">
+    <div class="stat-label">Per materiaal</div>
+    <table class="material-table">
+      <tbody>
+      {% for m in stats.per_material %}
+        <tr class="{% if not m.count %}muted{% endif %}">
+          <th scope="row"><span class="badge badge-{{ m.material | lower }}">{{ m.material }}</span></th>
+          <td>{{ m.count }} {{ "spoel" if m.count == 1 else "spoelen" }}</td>
+          <td>{{ m.weight_g | kg }}</td>
+          <td>{{ m.value | eur }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

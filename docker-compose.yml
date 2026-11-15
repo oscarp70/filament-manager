@@ -1,0 +1,44 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: filament-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-filament}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Zet POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-filament}
+      TZ: ${TZ:-Europe/Amsterdam}
+    volumes:
+      - filament_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  app:
+    build: .
+    image: filament-manager:latest
+    container_name: filament-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-filament}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-filament}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      MATERIALS: ${MATERIALS:-PLA,PETG,ABS,ASA}
+      LOW_STOCK_THRESHOLD: ${LOW_STOCK_THRESHOLD:-15}
+      DEFAULT_WEIGHT_NEW: ${DEFAULT_WEIGHT_NEW:-1000}
+      APP_TITLE: ${APP_TITLE:-Filament Manager}
+      SEED_DEMO: ${SEED_DEMO:-false}
+      TZ: ${TZ:-Europe/Amsterdam}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  filament_db:

@@ -1,0 +1,23 @@
+<section id="inventory" aria-live="polite">
+  {% if items %}
+    {% if items | length != stats.count %}
+    <p class="result-count">{{ items | length }} van {{ stats.count }} spoelen getoond</p>
+    {% endif %}
+    <div class="grid">
+      {% for f in items %}
+        {% with highlight = (saved == f.id) %}{% include "partials/card.html" %}{% endwith %}
+      {% endfor %}
+    </div>
+  {% elif stats.count %}
+    <div class="empty">
+      <p>Geen spoelen die aan dit filter voldoen.</p>
+      <a class="btn" href="/">Filter wissen</a>
+    </div>
+  {% else %}
+    <div class="empty">
+      {{ spool_svg(200, 200, 200, False, 0, uid="empty", css_class="spool spool-lg") }}
+      <p>Nog geen filament op voorraad.</p>
+      <a class="btn btn-primary" href="/filaments/new">+ Eerste spoel toevoegen</a>
+    </div>
+  {% endif %}
+</section>
