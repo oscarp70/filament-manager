@@ -78,11 +78,18 @@ def spool_svg(
     parts.append(
         f'<clipPath id="{uid}-clip"><circle cx="{CX}" cy="{CY}" r="{outer:.2f}"/></clipPath>'
     )
+    # Kruisjespatroon voor het lege deel van de spoel
+    parts.append(
+        f'<pattern id="{uid}-cross" width="5" height="5" patternUnits="userSpaceOnUse">'
+        '<path class="spool-cross" d="M1.6 2.5h1.8M2.5 1.6v1.8"/>'
+        "</pattern>"
+    )
     parts.append("</defs>")
 
     # Spoel: buitenflens en (lege) binnenruimte
     parts.append(f'<circle class="spool-flange" cx="{CX}" cy="{CY}" r="{R_FLANGE}"/>')
     parts.append(f'<circle class="spool-inner" cx="{CX}" cy="{CY}" r="{R_MAX + 0.8}"/>')
+    parts.append(f'<circle cx="{CX}" cy="{CY}" r="{R_MAX + 0.8}" fill="url(#{uid}-cross)"/>')
 
     # Filament
     if outer > R_HUB:

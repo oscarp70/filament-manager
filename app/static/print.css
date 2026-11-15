@@ -7,7 +7,7 @@
   --warn: #b77900;
   --primary: #e8590c;
   --flange: #b9bec7;
-  --flange-inner: #dde0e5;
+  --flange-inner: #ffffff;
   --hub: #f1ece0;
   --rim: rgba(0, 0, 0, .18);
   --fil-glow: rgba(255, 255, 255, .55);
@@ -23,6 +23,7 @@ body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-se
 .spool-hole { fill: var(--flange); }
 .spool-rim { fill: none; stroke: var(--rim); stroke-width: 1.2; }
 .spool-glow { fill: none; stroke: var(--fil-glow); stroke-width: 1; }
+.spool-cross { fill: none; stroke: var(--cross, rgba(0, 0, 0, .28)); stroke-width: .55; stroke-linecap: round; }
 svg.mini { width: 26px; height: 26px; display: block; }
 svg.logo { width: 46px; height: 46px; }
 

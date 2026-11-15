@@ -17,7 +17,7 @@
   --radius: 14px;
   /* spoel */
   --flange: #b9bec7;
-  --flange-inner: #dde0e5;
+  --flange-inner: #ffffff;
   --hub: #f1ece0;
   --hole: var(--bg-card);
   --rim: rgba(0, 0, 0, .18);
@@ -43,6 +43,7 @@
   --hub: #c9c2b3;
   --rim: rgba(255, 255, 255, .18);
   --fil-glow: rgba(255, 255, 255, .28);
+  --cross: rgba(255, 255, 255, .35);
   color-scheme: dark;
 }
 
@@ -113,6 +114,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .spool-hole { fill: var(--flange); }
 .spool-rim { fill: none; stroke: var(--rim); stroke-width: 1.2; }
 .spool-glow { fill: none; stroke: var(--fil-glow); stroke-width: 1; }
+.spool-cross { fill: none; stroke: var(--cross, rgba(0, 0, 0, .28)); stroke-width: .55; stroke-linecap: round; }
 
 /* ===== Statistieken ===== */
 .stats {
