@@ -16,7 +16,17 @@ def _build_database_url() -> str:
     host = os.getenv("POSTGRES_HOST", "db")
     port = os.getenv("POSTGRES_PORT", "5432")
     name = os.getenv("POSTGRES_DB", "filament")
-    return f"postgresql+psycopg://{user}:{password}@{host}:{port}/{name}"
+    # URL.create codeert speciale tekens (@ : / # % ?) in gebruikersnaam en wachtwoord correct
+    from sqlalchemy.engine import URL
+
+    return URL.create(
+        "postgresql+psycopg",
+        username=user,
+        password=password,
+        host=host,
+        port=int(port),
+        database=name,
+    ).render_as_string(hide_password=False)
 
 
 def _parse_materials(raw: str) -> list[str]:
