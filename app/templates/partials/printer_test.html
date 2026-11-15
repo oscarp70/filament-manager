@@ -1,0 +1,5 @@
+<ul class="test-results">
+  {% for name, ok, msg in results %}
+  <li class="{{ 'ok' if ok else 'fail' }}"><strong>{{ "✓" if ok else "✕" }} {{ name }}:</strong> {{ msg }}</li>
+  {% endfor %}
+</ul>

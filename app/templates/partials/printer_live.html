@@ -1,0 +1,82 @@
+<div id="printer-live" hx-get="/printer/live" hx-trigger="every 5s [fmShouldPoll()]" hx-swap="outerHTML">
+  <section class="panel printer-status">
+    <div class="status-line">
+      {% if not status.configured %}
+        <span class="dot dot-off"></span><strong>Niet ingesteld</strong>
+        <a class="btn btn-small" href="#instellingen">Printer instellen</a>
+      {% elif not status.enabled %}
+        <span class="dot dot-off"></span><strong>Koppeling uitgeschakeld</strong>
+        <a class="btn btn-small" href="#instellingen">Inschakelen</a>
+      {% elif status.connected %}
+        <span class="dot dot-on"></span><strong>Verbonden</strong>
+        <span class="hint">{% if status.last_message_local %}laatste bericht {{ status.last_message_local }}{% endif %}</span>
+      {% else %}
+        <span class="dot dot-warn"></span><strong>Niet verbonden</strong>
+        {% if status.last_error %}<span class="hint err">{{ status.last_error }}</span>{% else %}<span class="hint">Verbinden…</span>{% endif %}
+      {% endif %}
+    </div>
+
+    {% if status.gcode_state %}
+    <div class="print-now">
+      <div>
+        <div class="print-state">{{ status.gcode_state_label }}</div>
+        {% if status.subtask_name %}<div class="print-name">{{ status.subtask_name }}</div>{% endif %}
+      </div>
+      {% if status.gcode_state in ("RUNNING", "PAUSE", "PREPARE") %}
+      <div class="print-progress">
+        <div class="meter"><div class="meter-fill" style="width: {{ status.progress }}%; background: var(--primary)"></div></div>
+        <div class="hint">{{ status.progress }}%{% if status.total_layers %} · laag {{ status.layer }}/{{ status.total_layers }}{% endif %}{% if status.remaining_min %} · nog {{ status.remaining_min // 60 }}u {{ "%02d" % (status.remaining_min % 60) }}m{% endif %}</div>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+
+  {% if trays %}
+  <section class="panel">
+    <div class="panel-head">
+      <h2>AMS-sloten</h2>
+      <span class="hint">Spoelen met RFID worden automatisch gekoppeld. Wijs andere spoelen hier één keer toe.</span>
+    </div>
+    <div class="tray-grid">
+      {% for row in trays %}
+        {% set t = row.tray %}
+        <div class="tray{% if tray_now == t.slot %} tray-active{% endif %}{% if not t.present %} tray-empty{% endif %}">
+          <div class="tray-head">
+            <span class="tray-label">{{ t.label }}</span>
+            {% if tray_now == t.slot %}<span class="badge badge-pla">in gebruik</span>{% endif %}
+          </div>
+          <div class="tray-body">
+            {% if t.present %}
+              {% set rgb = t.color.lstrip('#') %}
+              {{ spool_svg(rgb[0:2]|int(base=16), rgb[2:4]|int(base=16), rgb[4:6]|int(base=16), False, t.remain if t.remain >= 0 else 100, uid="tray" ~ t.slot, css_class="spool tray-spool") }}
+              <div class="tray-info">
+                <strong>{{ t.material or "?" }}</strong>{% if t.name %} <span class="hint">{{ t.name }}</span>{% endif %}
+                <div class="hint"><span class="swatch" style="background: {{ t.color }}"></span> {{ t.color }}</div>
+                {% if t.remain >= 0 %}<div class="hint">AMS: {{ t.remain }}% over</div>{% endif %}
+                {% if t.has_tag %}<div class="hint">◉ RFID-tag</div>{% endif %}
+              </div>
+            {% else %}
+              <span class="hint">Leeg</span>
+            {% endif %}
+          </div>
+          <form hx-post="/printer/slots/{{ t.slot }}" hx-trigger="change" hx-target="#printer-live" hx-swap="outerHTML"
+                method="post" action="/printer/slots/{{ t.slot }}">
+            <select name="filament_id" aria-label="Spoel in {{ t.label }}">
+              <option value="">— geen spoel gekoppeld —</option>
+              {% for s in spools %}
+              <option value="{{ s.id }}" {% if row.filament and row.filament.id == s.id %}selected{% endif %}>{{ s.material }} · {{ s.color_name }} ({{ s.weight_current }} g)</option>
+              {% endfor %}
+            </select>
+            <noscript><button class="btn btn-small" type="submit">Opslaan</button></noscript>
+          </form>
+          {% if row.assignment and row.assignment.source == "rfid" and row.filament %}<div class="hint">gekoppeld via RFID</div>{% endif %}
+          {% if row.warn %}<div class="field-error">⚠ {{ row.warn }}</div>{% endif %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% elif status.configured and status.enabled %}
+  <section class="panel"><p class="hint">Nog geen AMS-gegevens ontvangen van de printer.</p></section>
+  {% endif %}
+</div>

@@ -37,6 +37,11 @@ services:
       APP_TITLE: ${APP_TITLE:-Filament Manager}
       SEED_DEMO: ${SEED_DEMO:-false}
       TZ: ${TZ:-Europe/Amsterdam}
+      BAMBU_ENABLED: ${BAMBU_ENABLED:-}
+      BAMBU_HOST: ${BAMBU_HOST:-}
+      BAMBU_SERIAL: ${BAMBU_SERIAL:-}
+      BAMBU_ACCESS_CODE: ${BAMBU_ACCESS_CODE:-}
+      BAMBU_AUTO_DEDUCT: ${BAMBU_AUTO_DEDUCT:-}
     ports:
       - "${APP_PORT:-8080}:8080"
 

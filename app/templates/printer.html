@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Printer · {{ settings.app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <a class="back" href="/">← Dashboard</a>
+  <h1>Printer</h1>
+</div>
+
+{% if msg == "saved" %}
+<div class="notice notice-ok" role="status">Printerinstellingen opgeslagen{% if config.bambu_enabled == "true" %}; de verbinding wordt opnieuw opgezet{% endif %}.</div>
+{% endif %}
+
+<div id="printer-live" hx-get="/printer/live" hx-trigger="every 5s [fmShouldPoll()]" hx-swap="outerHTML">
+  {% include "partials/printer_live.html" %}
+</div>
+
+<section class="panel">
+  <div class="panel-head">
+    <h2>Printgeschiedenis</h2>
+    <span class="hint">Verbruik wordt na elke print {{ "automatisch afgeschreven" if config.bambu_auto_deduct == "true" else "klaargezet; schrijf het handmatig af" }}.</span>
+  </div>
+  {% if jobs %}
+    <div class="jobs">
+      {% for job in jobs %}
+        {% set data = job_data(job) %}
+        {% include "partials/print_job.html" %}
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="hint">Nog geen prints gevolgd. Zodra de printer verbonden is en een print start, verschijnt die hier.</p>
+  {% endif %}
+</section>
+
+<section class="panel" id="instellingen">
+  <h2>Verbinding met Bambu Lab-printer</h2>
+  <form class="printer-form" method="post" action="/printer/settings" id="printer-settings">
+    <label class="switch">
+      <input type="checkbox" name="bambu_enabled" {% if config.bambu_enabled == "true" %}checked{% endif %}>
+      <span class="switch-track"></span><span>Koppeling inschakelen</span>
+    </label>
+    <div class="field-grid">
+      <div class="field">
+        <label for="bambu_host">IP-adres printer</label>
+        <input id="bambu_host" name="bambu_host" type="text" placeholder="192.168.1.50" value="{{ config.bambu_host }}" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="bambu_serial">Serienummer</label>
+        <input id="bambu_serial" name="bambu_serial" type="text" placeholder="01P00A..." value="{{ config.bambu_serial }}" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="bambu_access_code">Toegangscode (LAN)</label>
+        <input id="bambu_access_code" name="bambu_access_code" type="password" autocomplete="new-password"
+               placeholder="{{ '•••••••• (opgeslagen)' if config.bambu_access_code else '8 tekens' }}">
+      </div>
+    </div>
+    <label class="switch">
+      <input type="checkbox" name="bambu_auto_deduct" {% if config.bambu_auto_deduct == "true" %}checked{% endif %}>
+      <span class="switch-track"></span><span>Verbruik na elke print automatisch afschrijven</span>
+    </label>
+    <div class="btn-row">
+      <button class="btn btn-primary" type="submit">Opslaan</button>
+      <button class="btn" type="button" hx-post="/printer/test" hx-include="#printer-settings" hx-target="#test-result"
+              hx-indicator="#test-spinner">Verbinding testen</button>
+      <span id="test-spinner" class="htmx-indicator hint">Testen… (max. ± 20 seconden)</span>
+    </div>
+    <div id="test-result"></div>
+  </form>
+
+  <details class="howto">
+    <summary>Waar vind ik deze gegevens?</summary>
+    <ol>
+      <li>Ga op het scherm van de P1S naar <strong>Instellingen → WLAN / Netwerk</strong>. Daar staan het <strong>IP-adres</strong> en de <strong>toegangscode</strong> (Access Code).</li>
+      <li>Het <strong>serienummer</strong> staat onder <strong>Instellingen → Apparaat</strong>, in Bambu Studio bij het apparaat, of op de sticker achterop.</li>
+      <li>Op recente firmware (01.08.02 en nieuwer) moet je <strong>LAN-only mode</strong> en daarna <strong>Developer Mode</strong> aanzetten (zelfde menu). Anders weigert de printer software van derden. In LAN-only mode werkt Bambu Handy / de cloud niet; Bambu Studio werkt wel via LAN.</li>
+      <li>Geef de printer bij voorkeur een vast IP-adres in je router.</li>
+    </ol>
+    <p class="hint">Zo werkt het: via MQTT (poort 8883) volgt de app de printstatus en de AMS-sloten. Bij het starten en afronden van een print wordt het printbestand via FTPS (poort 990) van de printer gehaald. Uit <code>slice_info.config</code> leest de app per filament het aantal gram. Bij een afgebroken print wordt het geprinte deel afgeschreven (verbruik × voortgang).</p>
+  </details>
+</section>
+{% endblock %}

@@ -1,3 +1,9 @@
+// Niet verversen terwijl de gebruiker in een veld van het live-blok bezig is
+window.fmShouldPoll = function () {
+  var el = document.activeElement;
+  return !(el && el.closest && el.closest("#printer-live") && /^(SELECT|INPUT)$/.test(el.tagName));
+};
+
 (function () {
   "use strict";
 

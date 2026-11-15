@@ -1,0 +1,98 @@
+{% set fully = job.usages and (job.usages | selectattr("deducted_at") | list | length) == (job.usages | length) %}
+{% set some = job.usages | selectattr("deducted_at") | list | length > 0 %}
+<article class="job job-{{ job.status }}" id="job-{{ job.id }}">
+  <header class="job-head">
+    <div>
+      <div class="job-name">{{ job.name or "Print" }}{% if job.plate %} <span class="hint">· plaat {{ job.plate }}</span>{% endif %}</div>
+      <div class="hint">
+        {{ job.started_at | localdt }}{% if job.ended_at %} – {{ job.ended_at | localdt("%H:%M") }}{% endif %}
+        {% if job.status != "running" %}· verbruik {{ USAGE_SOURCE.get(job.usage_source, job.usage_source) }}{% endif %}
+      </div>
+    </div>
+    <div class="job-meta">
+      <span class="badge job-badge-{{ job.status }}">{{ JOB_STATUS.get(job.status, job.status) }}{% if job.status in ("failed", "cancelled", "unknown") %} ({{ job.progress }}%){% endif %}{% if job.status == "running" %} {{ job.progress }}%{% endif %}</span>
+      <strong class="job-total">{{ "%.1f" | format(job.total_g | float) | replace(".", ",") }} g</strong>
+    </div>
+  </header>
+
+  {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+  {% if info %}<div class="notice notice-ok" role="status">{{ info }}</div>{% endif %}
+  {% if job.note %}<p class="hint warn-text">{{ job.note }}</p>{% endif %}
+  {% if job.status == "running" %}
+    <p class="hint">Print loopt. Het verbruik wordt berekend zodra hij klaar is.{% if data.threemf %} Printbestand al opgehaald: {{ "%.1f" | format(data.threemf.weight_g) | replace(".", ",") }} g gepland.{% elif data.threemf_error %} Printbestand nog niet gevonden; bij het einde wordt het opnieuw geprobeerd.{% endif %}</p>
+  {% endif %}
+
+  {% if job.usages %}
+  <table class="usage-table">
+    <thead><tr><th></th><th>Filament</th><th>Slot</th><th class="num">Gram</th><th>Spoel</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for u in job.usages %}
+      <tr class="{% if not u.filament_id %}usage-unassigned{% endif %}">
+        <td><span class="swatch" style="background: {{ u.color or '#ccc' }}"></span></td>
+        <td>{{ u.material or "—" }}{% if u.filament_index %} <span class="hint">#{{ u.filament_index }}</span>{% endif %}</td>
+        <td class="hint">{{ slot_label(u.slot) if u.slot is not none else "—" }}</td>
+        <td class="num">
+          <form class="inline-form" hx-post="/printer/usages/{{ u.id }}/grams" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+                method="post" action="/printer/usages/{{ u.id }}/grams">
+            <input name="grams" type="text" inputmode="decimal" value="{{ ('%.2f' % (u.grams | float)) | replace('.', ',') }}" aria-label="Gram">
+          </form>
+        </td>
+        <td>
+          <form hx-post="/printer/usages/{{ u.id }}/assign" hx-trigger="change" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+                method="post" action="/printer/usages/{{ u.id }}/assign">
+            <select name="filament_id" aria-label="Spoel">
+              <option value="">— kies spoel —</option>
+              {% for s in spools %}
+              <option value="{{ s.id }}" {% if u.filament_id == s.id %}selected{% endif %}>{{ s.material }} · {{ s.color_name }} ({{ s.weight_current }} g)</option>
+              {% endfor %}
+            </select>
+          </form>
+        </td>
+        <td>
+          {% if u.deducted_at %}
+            <span class="badge badge-pla" title="{{ u.deducted_at | localdt }}">− {{ u.deducted_g | int }} g afgeschreven</span>
+          {% elif u.filament_id %}
+            <span class="badge">niet afgeschreven</span>
+          {% else %}
+            <span class="badge badge-abs">geen spoel</span>
+          {% endif %}
+        </td>
+        <td class="row-actions">
+          {% if u.deducted_at %}
+            <button class="btn btn-small btn-ghost" hx-post="/printer/usages/{{ u.id }}/undo" hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Terugdraaien</button>
+          {% elif u.filament_id %}
+            <button class="btn btn-small" hx-post="/printer/usages/{{ u.id }}/deduct" hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Afschrijven</button>
+          {% endif %}
+          <button class="btn btn-small btn-ghost btn-danger-text" title="Regel verwijderen" aria-label="Regel verwijderen"
+                  hx-post="/printer/usages/{{ u.id }}/delete" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+                  hx-confirm="Deze verbruiksregel verwijderen?{% if u.deducted_at %} Het afgeschreven gewicht komt terug op de spoel.{% endif %}">✕</button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if job.status != "running" %}
+  <details class="job-more">
+    <summary>Meer acties</summary>
+    <form class="add-usage" hx-post="/printer/jobs/{{ job.id }}/usages" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+          method="post" action="/printer/jobs/{{ job.id }}/usages">
+      <select name="filament_id" aria-label="Spoel">
+        <option value="">— kies spoel —</option>
+        {% for s in spools %}<option value="{{ s.id }}">{{ s.material }} · {{ s.color_name }} ({{ s.weight_current }} g)</option>{% endfor %}
+      </select>
+      <div class="input-suffix"><input name="grams" type="text" inputmode="decimal" placeholder="gram" required aria-label="Gram"><span>g</span></div>
+      <button class="btn btn-small" type="submit">Verbruik toevoegen</button>
+    </form>
+    <div class="btn-row">
+      {% if some %}<button class="btn btn-small" hx-post="/printer/jobs/{{ job.id }}/undo-all" hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Alles terugdraaien</button>{% endif %}
+      {% if job.usages and not fully %}<button class="btn btn-small" hx-post="/printer/jobs/{{ job.id }}/deduct-all" hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Alles afschrijven</button>{% endif %}
+      {% if not some %}<button class="btn btn-small" hx-post="/printer/jobs/{{ job.id }}/recompute" hx-target="#job-{{ job.id }}" hx-swap="outerHTML">Printbestand opnieuw ophalen</button>{% endif %}
+      <button class="btn btn-small btn-ghost btn-danger-text" hx-post="/printer/jobs/{{ job.id }}/delete" hx-target="#job-{{ job.id }}" hx-swap="outerHTML"
+              hx-confirm="Deze print uit de geschiedenis verwijderen? Afgeschreven gewicht blijft afgeschreven.">Uit geschiedenis verwijderen</button>
+    </div>
+    {% if data.threemf_error and job.usage_source != "3mf" %}<p class="hint">Printbestand: {{ data.threemf_error }}</p>{% endif %}
+  </details>
+  {% endif %}
+</article>

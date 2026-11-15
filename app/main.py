@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI
@@ -8,11 +10,22 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from . import api, web
+from . import api, printer_web, web
+from .bambu.service import service as bambu_service
 from .config import get_settings
 from .database import get_db
 
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    bambu_service.start()
+    try:
+        yield
+    finally:
+        bambu_service.stop()
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title=get_settings().app_title,
     description="Beheer je 3D-printfilament: voorraad, kleuren en waarde.",
     version="1.0.0",
@@ -20,6 +33,7 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 app.include_router(api.router)
+app.include_router(printer_web.router)
 app.include_router(web.router)
 
 

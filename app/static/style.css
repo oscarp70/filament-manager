@@ -158,7 +158,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .filters { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; }
 .filters .chip-group { flex: 1 1 auto; }
 .filter-selects { display: flex; gap: .5rem; flex-wrap: wrap; }
-select, input[type="text"], input[type="number"] {
+select, input[type="text"], input[type="number"], input[type="password"] {
   font: inherit; color: var(--text); background: var(--bg-card);
   border: 1px solid var(--border); border-radius: 10px; padding: .5rem .7rem;
   min-height: 2.5rem;
@@ -400,4 +400,73 @@ input[type="color"]::-moz-color-swatch { border: none; border-radius: 12px; }
   .filter-selects label, .filter-selects .btn { flex: 1 1 calc(50% - .5rem); }
   .filter-selects select { width: 100%; }
   .search { max-width: none; }
+}
+
+/* ===== Printer ===== */
+.panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; margin-bottom: .6rem; }
+.panel-head h2 { margin: 0; }
+.status-line { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.status-line .err { color: var(--danger); }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.dot-on { background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 20%, transparent); }
+.dot-warn { background: var(--warn); }
+.dot-off { background: var(--text-muted); }
+.print-now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 1rem; align-items: center; margin-top: .9rem; padding-top: .9rem; border-top: 1px dashed var(--border); }
+.print-state { font-weight: 750; font-size: 1.15rem; }
+.print-name { color: var(--text-muted); overflow-wrap: anywhere; }
+.print-progress .meter { height: 10px; margin-bottom: .3rem; }
+.tray-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: .8rem; }
+.tray { border: 1px solid var(--border); border-radius: 12px; padding: .7rem; display: flex; flex-direction: column; gap: .5rem; background: var(--bg-card); }
+.tray-active { border-color: var(--ok); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ok) 30%, transparent); }
+.tray-empty { opacity: .75; }
+.tray-head { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: .9rem; }
+.tray-body { display: flex; align-items: center; gap: .7rem; min-height: 64px; }
+.tray-spool { width: 60px; height: 60px; flex: none; }
+.tray-info { font-size: .9rem; min-width: 0; }
+.tray select, .usage-table select, .add-usage select { width: 100%; min-height: 2.2rem; padding: .3rem .5rem; font-size: .88rem; }
+.jobs { display: flex; flex-direction: column; gap: .8rem; }
+.job { border: 1px solid var(--border); border-radius: 12px; padding: .8rem 1rem; }
+.job-running { border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); }
+.job-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; margin-bottom: .5rem; }
+.job-name { font-weight: 700; overflow-wrap: anywhere; }
+.job-meta { display: flex; align-items: center; gap: .6rem; flex: none; }
+.job-total { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.job-badge-finished { background: color-mix(in srgb, var(--ok) 15%, var(--bg-card)); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.job-badge-running { background: color-mix(in srgb, var(--primary) 15%, var(--bg-card)); color: var(--primary); }
+.job-badge-failed, .job-badge-cancelled, .job-badge-unknown { background: var(--warn-bg); color: color-mix(in srgb, var(--warn) 70%, var(--text)); }
+.warn-text { color: color-mix(in srgb, var(--warn) 75%, var(--text)); }
+.usage-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.usage-table th { text-align: left; font-size: .7rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: .04em; padding: .3rem .4rem; border-bottom: 1px solid var(--border); }
+.usage-table td { padding: .35rem .4rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.usage-table .num { text-align: right; width: 90px; }
+.usage-table .inline-form input { width: 80px; text-align: right; min-height: 2rem; padding: .2rem .4rem; }
+.usage-unassigned td { background: color-mix(in srgb, var(--warn) 8%, transparent); }
+.row-actions { white-space: nowrap; text-align: right; }
+.job-more { margin-top: .6rem; }
+.job-more summary { cursor: pointer; color: var(--text-muted); font-size: .88rem; }
+.add-usage { display: grid; grid-template-columns: minmax(0, 2fr) 110px auto; gap: .5rem; margin-top: .6rem; align-items: center; }
+.add-usage input { width: 100%; }
+.printer-form { display: flex; flex-direction: column; gap: .8rem; }
+.printer-form .field { margin-bottom: 0; }
+.howto { margin-top: 1rem; }
+.howto summary { cursor: pointer; font-weight: 600; }
+.howto ol { padding-left: 1.2rem; }
+.test-results { list-style: none; padding: 0; margin: .3rem 0 0; display: grid; gap: .3rem; }
+.test-results li { padding: .5rem .7rem; border-radius: 8px; border: 1px solid var(--border); }
+.test-results .ok { background: color-mix(in srgb, var(--ok) 12%, var(--bg-card)); }
+.test-results .fail { background: color-mix(in srgb, var(--danger) 10%, var(--bg-card)); }
+.htmx-indicator { display: none; }
+.htmx-request .htmx-indicator, .htmx-request.htmx-indicator { display: inline; }
+@media (max-width: 760px) {
+  .print-now { grid-template-columns: 1fr; }
+  .usage-table thead { display: none; }
+  .usage-table tr { display: grid; grid-template-columns: 24px 1fr auto; gap: .2rem .5rem; padding: .5rem 0; border-bottom: 1px solid var(--border); }
+  .usage-table td { border: 0; padding: .1rem 0; }
+  .usage-table td:nth-child(3) { grid-column: 2 / -1; }
+  .usage-table td:nth-child(5), .usage-table td:nth-child(6), .usage-table td:nth-child(7) { grid-column: 1 / -1; }
+  .usage-table .num { width: auto; text-align: left; }
+  .row-actions { text-align: left; }
+  .add-usage { grid-template-columns: 1fr 1fr; }
+  .add-usage select { grid-column: 1 / -1; }
+  .job-head { flex-direction: column; }
 }

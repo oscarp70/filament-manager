@@ -14,6 +14,7 @@ Webapplicatie voor het beheren van 3D-printfilament. Per spoel leg je het materi
 - **RFID** per spoel (optioneel, uniek). Het zoekveld op het dashboard werkt ook met een USB-RFID-lezer die als toetsenbord werkt: scan de tag en de juiste spoel wordt gemarkeerd. Opzoeken kan ook via de API: `/api/filaments/by-rfid/{rfid}`.
 - **Snel gewicht bijwerken** vanaf de kaart, bijvoorbeeld na een print, zonder het volledige formulier.
 - **Voorraadoverzicht afdrukken of opslaan als PDF** via de knop *Afdrukken / PDF*: een A4-overzicht met kleurstalen, RFID, gewichten en waarde. Het volgt de actieve filters, kan per materiaal groeperen en heeft optioneel een kolom om af te vinken bij een telling.
+- **Koppeling met een Bambu Lab-printer** (getest met een nagebootste P1S, zie hieronder): na elke print wordt het verbruikte filament per spoel automatisch afgeschreven.
 - **Instellingenscherm** (⚙︎) met **export** (JSON als volledige back-up, CSV voor Excel) en **import** (*samenvoegen* of *vervangen*). Je ziet eerst een controle-overzicht, en de import gebeurt in één keer: alles of niets.
 - **Verwijderen** met een bevestigingsdialoog.
 - **REST API** onder `/api` met interactieve documentatie op `/docs`.
@@ -71,7 +72,7 @@ git pull
 docker compose up -d --build
 ```
 
-Bij het starten voert de app automatisch de nieuwe databasemigraties uit. Bestaande spoelen blijven behouden. Zo voegt migratie `0002_rfid` alleen een lege, optionele kolom `rfid` toe. Welke schemaversie actief is, zie je onder **Instellingen → Configuratie**.
+Bij het starten voert de app automatisch de nieuwe databasemigraties uit. Bestaande spoelen blijven behouden. Zo voegt migratie `0002_rfid` alleen een lege, optionele kolom `rfid` toe, en migratie `0003_printer` alleen nieuwe tabellen voor de printerkoppeling. Welke schemaversie actief is, zie je onder **Instellingen → Configuratie**.
 
 ## Configuratie (`.env`)
 
@@ -91,6 +92,36 @@ Bij het starten voert de app automatisch de nieuwe databasemigraties uit. Bestaa
 Na een wijziging: `docker compose up -d`.
 
 > Materiaal **verwijderen** uit `MATERIALS` terwijl er nog spoelen van dat materiaal zijn? Die spoelen blijven gewoon staan en tellen mee in de totalen. Je kunt er alleen niet meer op filteren, en bij het bewerken moet je een ander materiaal kiezen.
+
+## Bambu Lab-printer (P1S/P1P/X1/A1)
+
+Op de pagina **🖨︎ Printer** koppel je de app aan je printer. De app leest dan per print het filamentverbruik uit en schrijft het af van de juiste spoelen.
+
+![Printer](docs/printer.png)
+
+### Instellen
+
+1. **Op de printer:** ga naar *Instellingen → WLAN/Netwerk* en noteer het **IP-adres** en de **toegangscode**. Op firmware **01.08.02 of nieuwer** moet je **LAN-only mode** en daarna **Developer Mode** aanzetten. Anders blokkeert Bambu's "Authorization Control" toegang door andere software.
+   - Let op: in LAN-only mode werken Bambu Handy en de cloud niet. Bambu Studio en OrcaSlicer werken wel via LAN.
+2. **In de app:** ga naar *Printer → Verbinding*, vul het IP-adres, het **serienummer** en de toegangscode in, zet de koppeling aan en klik op **Verbinding testen**. Die test controleert zowel MQTT als FTPS.
+3. Geef de printer bij voorkeur een vast IP-adres in je router. De container moet de printer kunnen bereiken op poort **8883** (MQTT) en **990** (FTPS).
+
+Je kunt de gegevens ook via `.env` opgeven (`BAMBU_HOST`, `BAMBU_SERIAL`, `BAMBU_ACCESS_CODE`, `BAMBU_ENABLED`, `BAMBU_AUTO_DEDUCT`). Wat je in de webinterface opslaat gaat voor.
+
+### Hoe het verbruik wordt bepaald
+
+| Stap | Hoe |
+|---|---|
+| Print volgen | Via MQTT (TLS, poort 8883) ontvangt de app de status: start, voortgang, actieve AMS-tray, einde. |
+| Verbruik per filament | Bij start en einde haalt de app het printbestand (`.gcode.3mf`) via **FTPS** (poort 990) van de printer en leest `Metadata/slice_info.config`: per filament het aantal **gram** volgens de slicer. |
+| Welk slot | 1. De `ams_mapping` uit het printcommando, wanneer je via LAN print vanuit Bambu Studio of Orca.<br>2. Bij één kleur: het AMS-slot dat tijdens de print actief was.<br>3. Bij meerdere kleuren zonder mapping: de gebruikte sloten, gekoppeld op materiaal en kleur. |
+| Welke spoel | Een **Bambu-spoel met RFID** wordt automatisch herkend als je de tag-UID in het RFID-veld van de spoel zet (bv. `D5:3E:55:05` zoals een telefoon hem leest, of de volledige `tag_uid`/`tray_uuid`). **Andere spoelen** wijs je één keer per AMS-slot toe op de printerpagina. |
+| Afgebroken print | Verbruik × voortgang (bv. 50 g gepland, gestopt op 40% = 20 g). |
+| Geen printbestand | Als terugval het verschil in het AMS-percentage, alleen voor Bambu-spoelen. Lukt dat ook niet, dan krijg je een melding en vul je het verbruik zelf in. |
+
+Na de print staat elke print in de **printgeschiedenis**. Daar kun je per regel de spoel wijzigen, het aantal gram aanpassen, terugdraaien of handmatig verbruik toevoegen. Wil je liever eerst controleren, zet dan *Automatisch afschrijven* uit en klik per print op *Afschrijven*.
+
+**Getest:** de logica met nagebootste P1S-berichten (enkel- en meerkleurig, afgebroken, herstart van de app tijdens een print, ontbrekend printbestand), en de echte MQTT- en FTPS-code tegen een TLS-broker en een impliciete FTPS-server. **Nog niet getest** tegen een fysieke P1S. Zie je iets onverwachts, kijk dan in `docker compose logs app`.
 
 ## Export en import (instellingenscherm)
 
@@ -155,6 +186,8 @@ Je vindt de volledige, interactieve documentatie op **`/docs`** (Swagger) en **`
 | `DELETE` | `/api/filaments/{id}` | Spoel verwijderen |
 | `GET` | `/api/stats` | Totalen en uitsplitsing per materiaal |
 | `GET` | `/api/materials` | Beschikbare materialen |
+| `GET` | `/api/printer/status` | Printerstatus, AMS-sloten en gekoppelde spoelen |
+| `GET` | `/api/printer/jobs` | Printgeschiedenis met verbruik per spoel |
 | `GET` | `/api/export` | Volledige export (JSON) |
 | `POST` | `/api/import` | Import. Query: `mode=merge\|replace`, `dry_run=true\|false` |
 | `GET` | `/health` | Healthcheck (controleert ook de database) |
@@ -225,6 +258,8 @@ app/
   schemas.py       Pydantic-schema's, validatie, Nederlandse foutmeldingen
   spool.py         SVG-generator voor de spoel
   transfer.py      Export en import (JSON/CSV)
+  printer_web.py   Printerpagina en -API
+  bambu/           Printerkoppeling: MQTT-service, FTPS, 3MF-parser, slotlogica
   seed.py          Voorbeelddata
   templates/       Jinja2-templates
   static/          CSS, JavaScript, htmx
