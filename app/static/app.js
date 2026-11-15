@@ -130,6 +130,17 @@
     });
   }
 
+  // ---- Afdruklink volgt de actuele filters (die HTMX in de URL zet) ----
+  var printLink = document.getElementById("print-link");
+  if (printLink) {
+    printLink.addEventListener("click", function () {
+      var params = new URLSearchParams(window.location.search);
+      params.delete("saved");
+      var qs = params.toString();
+      printLink.href = "/inventory/print" + (qs ? "?" + qs : "");
+    });
+  }
+
   // ---- Zojuist opgeslagen kaart in beeld brengen ----
   var hl = document.querySelector(".card-highlight");
   if (hl && hl.scrollIntoView) hl.scrollIntoView({ block: "center", behavior: "smooth" });

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from . import crud
+from . import crud, transfer
 from .config import get_settings
 from .database import get_db
 from .models import Filament
@@ -44,12 +45,28 @@ def list_filaments(
     transparent: bool | None = None,
     sort: SortParam = "date",
     low_stock: bool | None = Query(None, description="Alleen spoelen onder (true) of boven (false) de drempel"),
+    q: str | None = Query(None, description="Zoek in kleurnaam en RFID"),
     db: Session = Depends(get_db),
 ) -> list[FilamentRead]:
-    items = crud.list_filaments(db, material=material, transparent=transparent, sort=sort)
+    items = crud.list_filaments(db, material=material, transparent=transparent, sort=sort, q=q)
     if low_stock is not None:
         items = [f for f in items if crud.is_low_stock(f) == low_stock]
     return [_read(f) for f in items]
+
+
+def _check_rfid(db: Session, rfid: str | None, exclude_id: int | None = None) -> None:
+    other = crud.find_by_rfid(db, rfid, exclude_id=exclude_id)
+    if other is not None:
+        raise HTTPException(status_code=409, detail=crud.rfid_conflict_message(other))
+
+
+@router.get("/filaments/by-rfid/{rfid}", response_model=FilamentRead)
+def get_by_rfid(rfid: str, db: Session = Depends(get_db)) -> FilamentRead:
+    """Zoek een spoel op RFID-tag (hoofdletterongevoelig), bv. vanuit een scanner of Home Assistant."""
+    obj = crud.find_by_rfid(db, rfid)
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Geen spoel met deze RFID")
+    return _read(obj)
 
 
 @router.get("/filaments/{filament_id}", response_model=FilamentRead)
@@ -59,12 +76,14 @@ def get_filament(filament_id: int, db: Session = Depends(get_db)) -> FilamentRea
 
 @router.post("/filaments", response_model=FilamentRead, status_code=status.HTTP_201_CREATED)
 def create_filament(data: FilamentCreate, db: Session = Depends(get_db)) -> FilamentRead:
+    _check_rfid(db, data.rfid)
     return _read(crud.create_filament(db, data))
 
 
 @router.put("/filaments/{filament_id}", response_model=FilamentRead)
 def replace_filament(filament_id: int, data: FilamentCreate, db: Session = Depends(get_db)) -> FilamentRead:
     obj = _get_or_404(db, filament_id)
+    _check_rfid(db, data.rfid, exclude_id=obj.id)
     return _read(crud.replace_filament(db, obj, data))
 
 
@@ -75,6 +94,7 @@ def update_filament(filament_id: int, patch: FilamentUpdate, db: Session = Depen
         data = crud.merged_update(obj, patch)
     except ValidationError as exc:
         raise RequestValidationError(exc.errors(include_url=False)) from exc
+    _check_rfid(db, data.rfid, exclude_id=obj.id)
     return _read(crud.replace_filament(db, obj, data))
 
 
@@ -97,3 +117,34 @@ def delete_filament(filament_id: int, db: Session = Depends(get_db)) -> Response
 @router.get("/stats", response_model=Stats)
 def stats(db: Session = Depends(get_db)) -> Stats:
     return crud.compute_stats(crud.list_filaments(db))
+
+
+@router.get("/export", tags=["export/import"])
+def export_all(db: Session = Depends(get_db)) -> Response:
+    """Volledige export als JSON (zelfde formaat als op het instellingenscherm)."""
+    return Response(transfer.export_json(db), media_type="application/json")
+
+
+@router.post("/import", tags=["export/import"])
+async def import_all(
+    request: Request,
+    mode: Literal["merge", "replace"] = "merge",
+    dry_run: bool = False,
+    db: Session = Depends(get_db),
+) -> dict:
+    """Importeer een JSON-export (body) of CSV. `mode=replace` wist eerst alle spoelen. `dry_run=true` controleert alleen."""
+    try:
+        plan = transfer.plan_import(db, await request.body(), mode)
+    except transfer.ImportFormatError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    result = {"mode": mode, "new": plan.new_count, "updated": plan.update_count,
+              "deleted": plan.to_delete, "errors": plan.errors, "applied": False}
+    if plan.errors:
+        raise HTTPException(status_code=422, detail=result)
+    if not dry_run:
+        try:
+            transfer.apply_import(db, plan)
+        except IntegrityError as exc:
+            raise HTTPException(status_code=409, detail="Dubbele RFID; niets gewijzigd") from exc
+        result["applied"] = True
+    return result

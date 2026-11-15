@@ -4,7 +4,7 @@ import colorsys
 from collections.abc import Sequence
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
@@ -41,8 +41,14 @@ def list_filaments(
     material: str | None = None,
     transparent: bool | None = None,
     sort: str = "date",
+    q: str | None = None,
 ) -> list[Filament]:
     stmt = select(Filament)
+    if q and q.strip():
+        term = f"%{q.strip().lower()}%"
+        stmt = stmt.where(
+            or_(func.lower(Filament.color_name).like(term), func.lower(Filament.rfid).like(term))
+        )
     if material:
         stmt = stmt.where(Filament.material == material.upper())
     if transparent is not None:
@@ -67,6 +73,20 @@ def list_filaments(
 
 def get_filament(db: Session, filament_id: int) -> Filament | None:
     return db.get(Filament, filament_id)
+
+
+def find_by_rfid(db: Session, rfid: str | None, exclude_id: int | None = None) -> Filament | None:
+    """Zoek een spoel op RFID (hoofdletterongevoelig)."""
+    if not rfid or not rfid.strip():
+        return None
+    stmt = select(Filament).where(func.upper(Filament.rfid) == rfid.strip().upper())
+    if exclude_id is not None:
+        stmt = stmt.where(Filament.id != exclude_id)
+    return db.scalars(stmt).first()
+
+
+def rfid_conflict_message(other: Filament) -> str:
+    return f"Deze RFID is al gekoppeld aan spoel #{other.id} ({other.color_name}, {other.material})"
 
 
 def create_filament(db: Session, data: FilamentCreate) -> Filament:

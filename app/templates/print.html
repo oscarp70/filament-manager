@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="nl" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Voorraadoverzicht {{ now | localdt("%d-%m-%Y") }} · {{ settings.app_title }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='print.css') }}">
+  <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
+</head>
+<body>
+  <div class="toolbar no-print">
+    <a class="tb-btn" href="/{% if back_query %}?{{ back_query }}{% endif %}">← Terug</a>
+    <form class="tb-options" method="get" action="/inventory/print">
+      {% for k in ("material", "transparent", "sort", "q") %}<input type="hidden" name="{{ k }}" value="{{ filters[k] }}">{% endfor %}
+      <input type="hidden" name="opts" value="1">
+      <label><input type="checkbox" name="group" value="1" {% if group %}checked{% endif %} onchange="this.form.submit()"> Groeperen per materiaal</label>
+      <label><input type="checkbox" name="count" value="1" {% if count_col %}checked{% endif %} onchange="this.form.submit()"> Kolom voor telling</label>
+    </form>
+    <button class="tb-btn tb-primary" type="button" onclick="window.print()">🖶 Afdrukken / Opslaan als PDF</button>
+    <p class="tb-hint">Tip: kies in het afdrukvenster <strong>"Opslaan als PDF"</strong> als printer om een PDF-bestand te maken.</p>
+  </div>
+
+  <main class="sheet">
+    <header class="sheet-head">
+      <div>
+        <h1>Voorraadoverzicht filament</h1>
+        <p class="meta">{{ settings.app_title }} · {{ now | localdt("%d-%m-%Y %H:%M") }}</p>
+        {% if filter_desc %}<p class="meta">Filter: {{ filter_desc }}</p>{% endif %}
+      </div>
+      {{ spool_svg(255, 140, 0, False, 80, uid="plogo", css_class="logo") }}
+    </header>
+
+    <section class="summary">
+      <div><span>Spoelen</span><strong>{{ totals.count }}</strong></div>
+      <div><span>Totaal gewicht</span><strong>{{ totals.weight_g | kg }}</strong></div>
+      <div><span>Voorraadwaarde</span><strong>{{ totals.value | eur }}</strong></div>
+      <div><span>Bijna op (&lt; {{ settings.low_stock_threshold | pct }})</span><strong>{{ totals.low_stock_count }}</strong></div>
+    </section>
+
+    {% if not items %}
+      <p class="empty">Geen spoelen gevonden.</p>
+    {% else %}
+      {% for group_name, rows in groups %}
+      <section class="group">
+        {% if group %}
+        <h2>
+          <span>{{ group_name }}</span>
+          <span class="group-sub">{{ rows | length }} {{ "spoel" if rows | length == 1 else "spoelen" }} · {{ rows | sum(attribute="weight_current") | kg }} · {{ rows | sum(attribute="remaining_value") | eur }}</span>
+        </h2>
+        {% endif %}
+        <table>
+          <thead>
+            <tr>
+              <th class="c-spool"></th>
+              <th>Kleur</th>
+              {% if not group %}<th class="w-mat">Mat.</th>{% endif %}
+              <th class="w-rfid">RFID</th>
+              <th class="num w-g">Nu</th>
+              <th class="num w-g">Nieuw</th>
+              <th class="num w-pct">%</th>
+              <th class="num w-eur">€/kg</th>
+              <th class="num w-eur">Waarde</th>
+              {% if count_col %}<th class="c-count">Geteld</th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+          {% for f in rows %}
+            {% set low = is_low_stock(f) %}
+            <tr class="{% if low %}low{% endif %}">
+              <td class="c-spool">{{ spool_svg(f.r, f.g, f.b, f.transparent, f.percent_remaining, uid="p" ~ f.id, css_class="mini") }}</td>
+              <td>
+                <div class="name">{{ f.color_name }}{% if f.transparent %} <span class="tag">transparant</span>{% endif %}{% if low %} <span class="tag tag-low">bijna op</span>{% endif %}</div>
+                <div class="sub"><span class="sw" style="background: {{ f.hex }}"></span>{{ f.hex | upper }} · #{{ f.id }}</div>
+              </td>
+              {% if not group %}<td>{{ f.material }}</td>{% endif %}
+              <td class="mono">{{ f.rfid or "—" }}</td>
+              <td class="num">{{ f.weight_current | grams }}</td>
+              <td class="num muted">{{ f.weight_new | grams }}</td>
+              <td class="num">{{ f.percent_remaining | pct }}</td>
+              <td class="num muted">{{ f.price_per_kg | eur }}</td>
+              <td class="num">{{ f.remaining_value | eur }}</td>
+              {% if count_col %}<td class="c-count"><span class="box"></span></td>{% endif %}
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </section>
+      {% endfor %}
+    {% endif %}
+
+    <footer class="sheet-foot">
+      Totaal: {{ totals.count }} spoelen · {{ totals.weight_g | kg }} · {{ totals.value | eur }}
+    </footer>
+  </main>
+</body>
+</html>

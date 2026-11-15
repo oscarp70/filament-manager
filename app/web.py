@@ -16,7 +16,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from . import crud
+from . import crud, transfer
 from .config import get_settings
 from .database import get_db
 from .models import Filament
@@ -90,6 +90,7 @@ def _form_to_raw(form: Any) -> dict[str, Any]:
         "price_per_kg": (form.get("price_per_kg") or "").strip().replace(",", "."),
         "weight_new": (form.get("weight_new") or "").strip(),
         "weight_current": (form.get("weight_current") or "").strip(),
+        "rfid": (form.get("rfid") or "").strip(),
     }
     for ch in ("r", "g", "b"):
         raw[ch] = (form.get(ch) or "").strip()
@@ -113,6 +114,7 @@ def _form_defaults(f: Filament | None = None) -> dict[str, Any]:
             "price_per_kg": "",
             "weight_new": settings.default_weight_new,
             "weight_current": settings.default_weight_new,
+            "rfid": "",
         }
     return {
         "material": f.material,
@@ -122,6 +124,7 @@ def _form_defaults(f: Filament | None = None) -> dict[str, Any]:
         "price_per_kg": f"{f.price_per_kg:.2f}",
         "weight_new": f.weight_new,
         "weight_current": f.weight_current,
+        "rfid": f.rfid or "",
     }
 
 
@@ -150,29 +153,45 @@ def _stats_ctx(db: Session) -> dict[str, Any]:
 
 # --- Routes ---
 
+def _apply_filters(
+    db: Session, material: str | None, transparent: str | None, sort: str, q: str | None
+) -> tuple[list[Filament], dict[str, str]]:
+    settings = get_settings()
+    material = material.upper() if material and material.upper() in settings.materials else None
+    if sort not in crud.SORT_OPTIONS:
+        sort = "date"
+    transparent_filter = _parse_bool(transparent)
+    q = (q or "").strip()
+    items = crud.list_filaments(db, material=material, transparent=transparent_filter, sort=sort, q=q or None)
+    filters = {
+        "material": material or "",
+        "transparent": "" if transparent_filter is None else ("true" if transparent_filter else "false"),
+        "sort": sort,
+        "q": q,
+    }
+    return items, filters
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(
     request: Request,
     material: str | None = None,
     transparent: str | None = None,
     sort: str = "date",
+    q: str | None = None,
     saved: int | None = None,
     db: Session = Depends(get_db),
 ) -> Response:
-    settings = get_settings()
-    material = material.upper() if material and material.upper() in settings.materials else None
-    if sort not in crud.SORT_OPTIONS:
-        sort = "date"
-    transparent_filter = _parse_bool(transparent)
-    items = crud.list_filaments(db, material=material, transparent=transparent_filter, sort=sort)
+    items, filters = _apply_filters(db, material, transparent, sort, q)
+    # Gescande RFID die exact één spoel oplevert: die spoel markeren
+    if filters["q"] and saved is None:
+        exact = crud.find_by_rfid(db, filters["q"])
+        if exact is not None and exact in items:
+            saved = exact.id
     ctx = {
         "request": request,
         "items": items,
-        "filters": {
-            "material": material or "",
-            "transparent": "" if transparent_filter is None else ("true" if transparent_filter else "false"),
-            "sort": sort,
-        },
+        "filters": filters,
         "sort_options": crud.SORT_OPTIONS,
         "saved": saved,
         **_stats_ctx(db),
@@ -219,6 +238,14 @@ async def create(request: Request, db: Session = Depends(get_db)) -> Response:
             {"values": raw, "hex": _hex_of(raw), "errors": dutch_errors(exc), "filament": None},
             status_code=422,
         )
+    other = crud.find_by_rfid(db, data.rfid)
+    if other is not None:
+        return templates.TemplateResponse(
+            request, "form.html",
+            {"values": raw, "hex": _hex_of(raw), "errors": {"rfid": crud.rfid_conflict_message(other)},
+             "filament": None},
+            status_code=409,
+        )
     obj = crud.create_filament(db, data)
     return RedirectResponse(f"/?saved={obj.id}", status_code=303)
 
@@ -243,6 +270,14 @@ async def update(filament_id: int, request: Request, db: Session = Depends(get_d
             request, "form.html",
             {"values": raw, "hex": _hex_of(raw), "errors": dutch_errors(exc), "filament": obj},
             status_code=422,
+        )
+    other = crud.find_by_rfid(db, data.rfid, exclude_id=obj.id)
+    if other is not None:
+        return templates.TemplateResponse(
+            request, "form.html",
+            {"values": raw, "hex": _hex_of(raw), "errors": {"rfid": crud.rfid_conflict_message(other)},
+             "filament": obj},
+            status_code=409,
         )
     crud.replace_filament(db, obj, data)
     return RedirectResponse(f"/?saved={obj.id}", status_code=303)
@@ -284,3 +319,166 @@ def delete_htmx(filament_id: int, request: Request, db: Session = Depends(get_db
 def delete_form(filament_id: int, db: Session = Depends(get_db)) -> Response:
     crud.delete_filament(db, _get_or_404(db, filament_id))
     return RedirectResponse("/", status_code=303)
+
+
+# --- Afdrukbaar overzicht ---
+
+@router.get("/inventory/print", response_class=HTMLResponse)
+def inventory_print(
+    request: Request,
+    material: str | None = None,
+    transparent: str | None = None,
+    sort: str = "color",
+    q: str | None = None,
+    group: str | None = None,
+    count: str | None = None,
+    db: Session = Depends(get_db),
+) -> HTMLResponse:
+    from datetime import timezone
+    from urllib.parse import urlencode
+
+    items, filters = _apply_filters(db, material, transparent, sort, q)
+    # Standaard gegroepeerd; bij een submit van het optieformulier telt de checkbox
+    submitted = request.query_params.get("opts") == "1"
+    do_group = (group == "1") if submitted else True
+    count_col = count == "1"
+
+    settings = get_settings()
+    if do_group:
+        order = {m: i for i, m in enumerate(settings.materials)}
+        groups_map: dict[str, list[Filament]] = {}
+        for f in items:
+            groups_map.setdefault(f.material, []).append(f)
+        groups = sorted(groups_map.items(), key=lambda kv: (order.get(kv[0], 999), kv[0]))
+    else:
+        groups = [("", items)]
+
+    desc = []
+    if filters["material"]:
+        desc.append(filters["material"])
+    if filters["transparent"] == "true":
+        desc.append("transparant")
+    elif filters["transparent"] == "false":
+        desc.append("niet transparant")
+    if filters["q"]:
+        desc.append(f'zoekterm "{filters["q"]}"')
+    back = {k: v for k, v in filters.items() if v and not (k == "sort" and v == "date")}
+
+    return templates.TemplateResponse(
+        request,
+        "print.html",
+        {
+            "items": items,
+            "groups": groups,
+            "group": do_group,
+            "count_col": count_col,
+            "filters": filters,
+            "filter_desc": ", ".join(desc),
+            "back_query": urlencode(back),
+            "totals": crud.compute_stats(items),
+            "now": datetime.now(timezone.utc),
+        },
+    )
+
+
+# --- Instellingen: export en import ---
+
+def _settings_ctx(db: Session, **extra: Any) -> dict[str, Any]:
+    from sqlalchemy import text as sql_text
+
+    try:
+        revision = db.execute(sql_text("SELECT version_num FROM alembic_version")).scalar()
+    except Exception:  # tabel bestaat niet (bv. in tests)
+        db.rollback()
+        revision = None
+    url = make_url_safe(get_settings().database_url)
+    return {"count": len(crud.list_filaments(db)), "revision": revision, "db_url": url, **extra}
+
+
+def make_url_safe(url: str) -> str:
+    from sqlalchemy.engine import make_url
+
+    try:
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:
+        return "?"
+
+
+def _export_filename(ext: str) -> str:
+    return f"filament-export-{datetime.now(_TZ).strftime('%Y%m%d-%H%M')}.{ext}"
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, imported: int | None = None, mode: str | None = None,
+                  db: Session = Depends(get_db)) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request, "settings.html", _settings_ctx(db, imported=imported, imported_mode=mode)
+    )
+
+
+@router.get("/settings/export.json")
+def export_json_download(db: Session = Depends(get_db)) -> Response:
+    return Response(
+        transfer.export_json(db),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{_export_filename("json")}"'},
+    )
+
+
+@router.get("/settings/export.csv")
+def export_csv_download(db: Session = Depends(get_db)) -> Response:
+    return Response(
+        transfer.export_csv(db).encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{_export_filename("csv")}"'},
+    )
+
+
+@router.post("/settings/import", response_class=HTMLResponse)
+async def import_preview(request: Request, db: Session = Depends(get_db)) -> HTMLResponse:
+    form = await request.form()
+    mode = form.get("mode") or "merge"
+    upload = form.get("file")
+    error = None
+    plan = None
+    filename = getattr(upload, "filename", "") or ""
+    if upload is None or not filename:
+        error = "Kies eerst een exportbestand (.json of .csv)"
+    else:
+        content = await upload.read()
+        try:
+            plan = transfer.plan_import(db, content, mode)
+        except transfer.ImportFormatError as exc:
+            error = str(exc)
+    return templates.TemplateResponse(
+        request, "settings.html",
+        _settings_ctx(db, plan=plan, import_error=error, mode=mode, filename=filename,
+                      payload=transfer.plan_to_json(plan) if plan and plan.ok else None),
+        status_code=200 if plan and plan.ok else 422,
+    )
+
+
+@router.post("/settings/import/apply", response_class=HTMLResponse)
+async def import_apply(request: Request, db: Session = Depends(get_db)) -> Response:
+    from sqlalchemy.exc import IntegrityError
+
+    form = await request.form()
+    mode = form.get("mode") or "merge"
+    payload = (form.get("payload") or "").encode("utf-8")
+    error = None
+    plan = None
+    try:
+        # Opnieuw plannen tegen de huidige database (die kan intussen gewijzigd zijn)
+        plan = transfer.plan_import(db, payload, mode)
+        transfer.apply_import(db, plan)
+    except transfer.ImportFormatError as exc:
+        error = str(exc)
+    except IntegrityError:
+        db.rollback()
+        error = "De import botst met bestaande gegevens (dubbele RFID). Er is niets gewijzigd."
+    if error:
+        return templates.TemplateResponse(
+            request, "settings.html", _settings_ctx(db, plan=plan, import_error=error, mode=mode),
+            status_code=422,
+        )
+    return RedirectResponse(f"/settings?imported={len(plan.rows)}&mode={mode}", status_code=303)

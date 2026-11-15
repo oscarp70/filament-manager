@@ -11,10 +11,15 @@ Webapplicatie voor het beheren van 3D-printfilament. Per spoel leg je het materi
 - **Filteren** op materiaal en transparantie, en **sorteren** op kleur (tint), resterend gewicht, datum of naam.
 - **"Bijna op"-markering** onder een instelbare drempel (standaard 15%).
 - **Toevoegen en bewerken** met een color picker, hex-veld en R/G/B-velden die onderling synchroon blijven, een palet met veelgebruikte kleuren en een **live voorbeeld** van de spoel.
+- **RFID** per spoel (optioneel, uniek). Het zoekveld op het dashboard werkt ook met een USB-RFID-lezer die als toetsenbord werkt: scan de tag en de juiste spoel wordt gemarkeerd. Opzoeken kan ook via de API: `/api/filaments/by-rfid/{rfid}`.
 - **Snel gewicht bijwerken** vanaf de kaart, bijvoorbeeld na een print, zonder het volledige formulier.
+- **Voorraadoverzicht afdrukken of opslaan als PDF** via de knop *Afdrukken / PDF*: een A4-overzicht met kleurstalen, RFID, gewichten en waarde. Het volgt de actieve filters, kan per materiaal groeperen en heeft optioneel een kolom om af te vinken bij een telling.
+- **Instellingenscherm** (⚙︎) met **export** (JSON als volledige back-up, CSV voor Excel) en **import** (*samenvoegen* of *vervangen*). Je ziet eerst een controle-overzicht, en de import gebeurt in één keer: alles of niets.
 - **Verwijderen** met een bevestigingsdialoog.
 - **REST API** onder `/api` met interactieve documentatie op `/docs`.
 - Responsive voor telefoon, met een **licht en donker thema** (volgt het systeem en is te wisselen met de knop rechtsboven).
+
+Voorbeeld van een afgedrukt overzicht: [docs/voorbeeld-voorraadoverzicht.pdf](docs/voorbeeld-voorraadoverzicht.pdf)
 
 | Formulier (donker thema) | Mobiel |
 |---|---|
@@ -29,7 +34,7 @@ Webapplicatie voor het beheren van 3D-printfilament. Per spoel leg je het materi
 | Frontend | Server-rendered Jinja2 met HTMX. Geen build-stap, htmx wordt lokaal meegeleverd en er is geen CDN nodig |
 | Draaien | Docker Compose: services `app` en `db` |
 
-Opgeslagen per spoel: `material`, `color_name`, `r`, `g`, `b` (0–255), `transparent`, `price_per_kg` (2 decimalen), `weight_new` en `weight_current` (gram), `created_at` en `updated_at`.
+Opgeslagen per spoel: `material`, `color_name`, `r`, `g`, `b` (0–255), `transparent`, `price_per_kg` (2 decimalen), `weight_new` en `weight_current` (gram), `rfid` (optioneel, uniek), `created_at` en `updated_at`.
 Berekend en niet opgeslagen: `hex`, `percent_remaining` (= gewicht nu / gewicht nieuw) en `remaining_value` (= gewicht nu / 1000 × prijs per kilo).
 
 ## Installatie
@@ -60,9 +65,13 @@ docker compose exec app python -m app.seed --force  # altijd toevoegen
 ### Bijwerken
 
 ```bash
+# 1. Eerst een back-up (zie hieronder, of via Instellingen → Export JSON)
+# 2. Nieuwe versie ophalen en opnieuw bouwen
 git pull
 docker compose up -d --build
 ```
+
+Bij het starten voert de app automatisch de nieuwe databasemigraties uit. Bestaande spoelen blijven behouden. Zo voegt migratie `0002_rfid` alleen een lege, optionele kolom `rfid` toe. Welke schemaversie actief is, zie je onder **Instellingen → Configuratie**.
 
 ## Configuratie (`.env`)
 
@@ -83,7 +92,22 @@ Na een wijziging: `docker compose up -d`.
 
 > Materiaal **verwijderen** uit `MATERIALS` terwijl er nog spoelen van dat materiaal zijn? Die spoelen blijven gewoon staan en tellen mee in de totalen. Je kunt er alleen niet meer op filteren, en bij het bewerken moet je een ander materiaal kiezen.
 
-## Back-up en herstel
+## Export en import (instellingenscherm)
+
+![Instellingen](docs/instellingen.png)
+
+Ga naar **⚙︎ Instellingen**:
+
+- **Export JSON** is een volledige back-up van alle spoelen, inclusief aanmaakdatum. Dit is het aanbevolen formaat om terug te zetten.
+- **Export CSV** gebruikt puntkomma en decimale komma en opent direct in Excel. Ook dit formaat kun je weer importeren.
+- **Import** accepteert `.json` en `.csv`:
+  - *Samenvoegen*: bestaande spoelen worden bijgewerkt. Een spoel wordt herkend aan de RFID, of aan het id wanneer kleurnaam en materiaal overeenkomen. De rest wordt toegevoegd en er wordt niets verwijderd. Importeer je je eigen export opnieuw, dan ontstaan er dus geen dubbele spoelen.
+  - *Vervangen*: alle huidige spoelen worden verwijderd en vervangen door de inhoud van het bestand.
+  - Je krijgt altijd eerst een controle met het aantal nieuwe, bij te werken en te verwijderen spoelen en eventuele fouten. Bevat het bestand een fout, dan wordt er niets gewijzigd.
+
+Via de API: `GET /api/export` en `POST /api/import?mode=merge|replace&dry_run=true` (body is de JSON- of CSV-inhoud).
+
+## Back-up en herstel (database)
 
 ### Back-up maken
 
@@ -121,8 +145,9 @@ Je vindt de volledige, interactieve documentatie op **`/docs`** (Swagger) en **`
 
 | Methode | Pad | Omschrijving |
 |---|---|---|
-| `GET` | `/api/filaments` | Lijst. Query: `material`, `transparent`, `low_stock`, `sort` (`date`, `date_asc`, `color`, `weight`, `weight_asc`, `name`) |
+| `GET` | `/api/filaments` | Lijst. Query: `material`, `transparent`, `low_stock`, `q` (zoeken in kleurnaam/RFID), `sort` (`date`, `date_asc`, `color`, `weight`, `weight_asc`, `name`) |
 | `GET` | `/api/filaments/{id}` | Eén spoel |
+| `GET` | `/api/filaments/by-rfid/{rfid}` | Spoel opzoeken op RFID (hoofdletterongevoelig) |
 | `POST` | `/api/filaments` | Nieuwe spoel |
 | `PUT` | `/api/filaments/{id}` | Spoel volledig vervangen |
 | `PATCH` | `/api/filaments/{id}` | Spoel gedeeltelijk bijwerken |
@@ -130,6 +155,8 @@ Je vindt de volledige, interactieve documentatie op **`/docs`** (Swagger) en **`
 | `DELETE` | `/api/filaments/{id}` | Spoel verwijderen |
 | `GET` | `/api/stats` | Totalen en uitsplitsing per materiaal |
 | `GET` | `/api/materials` | Beschikbare materialen |
+| `GET` | `/api/export` | Volledige export (JSON) |
+| `POST` | `/api/import` | Import. Query: `mode=merge\|replace`, `dry_run=true\|false` |
 | `GET` | `/health` | Healthcheck (controleert ook de database) |
 
 Voorbeeld:
@@ -197,6 +224,7 @@ app/
   models.py        SQLAlchemy-model Filament
   schemas.py       Pydantic-schema's, validatie, Nederlandse foutmeldingen
   spool.py         SVG-generator voor de spoel
+  transfer.py      Export en import (JSON/CSV)
   seed.py          Voorbeelddata
   templates/       Jinja2-templates
   static/          CSS, JavaScript, htmx

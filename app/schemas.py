@@ -21,6 +21,15 @@ class FilamentBase(BaseModel):
     price_per_kg: Decimal = Field(ge=0, max_digits=8, decimal_places=2)
     weight_new: int = Field(gt=0, le=100_000)
     weight_current: int = Field(ge=0, le=100_000)
+    rfid: str | None = Field(default=None, max_length=64)
+
+    @field_validator("rfid", mode="before")
+    @classmethod
+    def _clean_rfid(cls, v: object) -> object:
+        if v is None:
+            return None
+        v = str(v).strip()
+        return v or None
 
     @field_validator("color_name")
     @classmethod
@@ -62,6 +71,7 @@ class FilamentUpdate(BaseModel):
     price_per_kg: Decimal | None = None
     weight_new: int | None = None
     weight_current: int | None = None
+    rfid: str | None = None
 
 
 class WeightUpdate(BaseModel):
@@ -84,6 +94,7 @@ class FilamentRead(BaseModel):
     weight_current: int
     percent_remaining: float
     remaining_value: Decimal
+    rfid: str | None = None
     low_stock: bool = False
     created_at: datetime
     updated_at: datetime
@@ -117,6 +128,7 @@ FIELD_LABELS = {
     "price_per_kg": "Prijs per kilo",
     "weight_new": "Gewicht nieuw",
     "weight_current": "Gewicht nu",
+    "rfid": "RFID",
 }
 
 

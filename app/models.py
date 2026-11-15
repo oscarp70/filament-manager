@@ -32,6 +32,7 @@ class Filament(Base):
     price_per_kg: Mapped[Decimal] = mapped_column(Numeric(8, 2))
     weight_new: Mapped[int] = mapped_column(Integer, default=1000, server_default="1000")
     weight_current: Mapped[int] = mapped_column(Integer)
+    rfid: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

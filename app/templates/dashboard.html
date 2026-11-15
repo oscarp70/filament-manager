@@ -3,7 +3,12 @@
 {% include "partials/stats.html" %}
 
 <form id="filters" class="filters" action="/" method="get"
-      hx-get="/" hx-target="#inventory" hx-swap="outerHTML" hx-push-url="true" hx-trigger="change">
+      hx-get="/" hx-target="#inventory" hx-swap="outerHTML" hx-push-url="true"
+      hx-trigger="change, submit, input changed delay:350ms from:#q, search from:#q">
+  <div class="search">
+    <label for="q" class="sr-only">Zoeken of RFID scannen</label>
+    <input id="q" name="q" type="search" value="{{ filters.q }}" placeholder="Zoek of scan RFID…" autocomplete="off" spellcheck="false">
+  </div>
   <div class="chip-group" role="radiogroup" aria-label="Materiaal">
     <label class="chip"><input type="radio" name="material" value="" {% if not filters.material %}checked{% endif %}><span>Alles</span></label>
     {% for m in settings.materials %}
@@ -28,6 +33,7 @@
       </select>
     </label>
     <noscript><button class="btn" type="submit">Filter</button></noscript>
+    <a class="btn" id="print-link" href="/inventory/print{% if filters.material or filters.transparent or filters.q or filters.sort != 'date' %}?material={{ filters.material }}&amp;transparent={{ filters.transparent }}&amp;sort={{ filters.sort }}&amp;q={{ filters.q | urlencode }}{% endif %}" title="Voorraadoverzicht afdrukken of als PDF opslaan">🖶 Afdrukken / PDF</a>
   </div>
 </form>
 

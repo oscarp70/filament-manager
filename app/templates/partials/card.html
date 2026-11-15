@@ -11,6 +11,7 @@
       {% if f.transparent %}<span class="badge badge-transparent">Transparant</span>{% endif %}
     </div>
     <h2 class="card-title">{{ f.color_name }}</h2>
+    {% if f.rfid %}<div class="card-rfid" title="RFID"><span class="rfid-icon" aria-hidden="true">◉</span><code>{{ f.rfid }}</code></div>{% endif %}
     <div class="card-hex"><span class="swatch" style="background: {{ f.hex }}"></span><code>{{ f.hex | upper }}</code> <span class="rgb">rgb({{ f.r }}, {{ f.g }}, {{ f.b }})</span></div>
 
     <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ f.percent_remaining }}" aria-label="Resterend">

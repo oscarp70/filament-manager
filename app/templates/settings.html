@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Instellingen · {{ settings.app_title }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <a class="back" href="/">← Dashboard</a>
+  <h1>Instellingen</h1>
+</div>
+
+{% if imported is defined and imported is not none %}
+<div class="notice notice-ok" role="status">
+  Import voltooid: {{ imported }} {{ "spoel" if imported == 1 else "spoelen" }} {{ "vervangen" if imported_mode == "replace" else "verwerkt" }}.
+  <a href="/">Naar het dashboard →</a>
+</div>
+{% endif %}
+
+<div class="settings-grid">
+  <section class="panel">
+    <h2>Export</h2>
+    <p class="hint">Download alle {{ count }} spoelen. Met <strong>JSON</strong> maak je een volledige back-up die je hier weer kunt importeren. <strong>CSV</strong> opent direct in Excel (puntkomma en decimale komma) en kun je ook importeren.</p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="/settings/export.json" download>⭳ Export JSON</a>
+      <a class="btn" href="/settings/export.csv" download>⭳ Export CSV</a>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Import</h2>
+    <form class="import-form" action="/settings/import" method="post" enctype="multipart/form-data">
+      <div class="field">
+        <label for="file">Exportbestand (.json of .csv)</label>
+        <input id="file" name="file" type="file" accept=".json,.csv,application/json,text/csv" required>
+      </div>
+      <fieldset class="radio-cards">
+        <legend class="sr-only">Importmodus</legend>
+        <label class="radio-card">
+          <input type="radio" name="mode" value="merge" {% if (mode or "merge") == "merge" %}checked{% endif %}>
+          <span><strong>Samenvoegen</strong><br><span class="hint">Bestaande spoelen worden bijgewerkt: op RFID, of op id wanneer kleurnaam en materiaal overeenkomen. Al het andere wordt toegevoegd. Er wordt niets verwijderd.</span></span>
+        </label>
+        <label class="radio-card radio-card-danger">
+          <input type="radio" name="mode" value="replace" {% if mode == "replace" %}checked{% endif %}>
+          <span><strong>Vervangen</strong><br><span class="hint">Alle huidige spoelen ({{ count }}) worden verwijderd en vervangen door de inhoud van het bestand.</span></span>
+        </label>
+      </fieldset>
+      <button class="btn" type="submit">Bestand controleren</button>
+      <p class="hint">Er verandert nog niets: je krijgt eerst een overzicht en bevestigt daarna.</p>
+    </form>
+  </section>
+</div>
+
+{% if import_error or plan %}
+<section class="panel import-result" id="import-result">
+  <h2>Controle {% if filename %}<span class="muted">— {{ filename }}</span>{% endif %}</h2>
+  {% if import_error %}<div class="alert" role="alert">{{ import_error }}</div>{% endif %}
+  {% if plan %}
+    <div class="result-stats">
+      <div><span>Nieuw</span><strong>{{ plan.new_count if plan.mode == "merge" else plan.rows | length }}</strong></div>
+      {% if plan.mode == "merge" %}<div><span>Bijwerken</span><strong>{{ plan.update_count }}</strong></div>{% endif %}
+      {% if plan.mode == "replace" %}<div class="danger"><span>Verwijderen</span><strong>{{ plan.to_delete }}</strong></div>{% endif %}
+      <div class="{% if plan.errors %}danger{% endif %}"><span>Fouten</span><strong>{{ plan.errors | length }}</strong></div>
+    </div>
+    {% if plan.errors %}
+      <div class="alert" role="alert">
+        <strong>De import kan niet worden uitgevoerd.</strong> Pas het bestand aan en probeer het opnieuw:
+        <ul class="error-list">{% for e in plan.errors[:50] %}<li>{{ e }}</li>{% endfor %}</ul>
+        {% if plan.errors | length > 50 %}<p>… en nog {{ plan.errors | length - 50 }} fouten.</p>{% endif %}
+      </div>
+    {% elif plan.rows %}
+      <table class="mini-table">
+        <thead><tr><th></th><th>Kleur</th><th>Materiaal</th><th>RFID</th><th class="num">Gewicht</th><th>Actie</th></tr></thead>
+        <tbody>
+        {% for row in plan.rows[:200] %}
+          {% set d = row.data %}
+          <tr>
+            <td><span class="swatch" style="background: rgb({{ d.r }},{{ d.g }},{{ d.b }})"></span></td>
+            <td>{{ d.color_name }}{% if d.transparent %} <span class="muted">(transparant)</span>{% endif %}</td>
+            <td>{{ d.material }}</td>
+            <td><code>{{ d.rfid or "—" }}</code></td>
+            <td class="num">{{ d.weight_current | grams }}</td>
+            <td>{% if row.action == "update" %}<span class="badge">bijwerken #{{ row.target_id }}</span>{% else %}<span class="badge badge-pla">nieuw</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if plan.rows | length > 200 %}<p class="hint">… en nog {{ plan.rows | length - 200 }} spoelen.</p>{% endif %}
+      <form class="btn-row" action="/settings/import/apply" method="post"
+            {% if plan.mode == "replace" %}data-confirm="Alle {{ plan.to_delete }} huidige spoelen verwijderen en vervangen door {{ plan.rows | length }} spoelen uit het bestand? Maak eerst een export als je dat nog niet hebt gedaan."{% endif %}>
+        <input type="hidden" name="mode" value="{{ plan.mode }}">
+        <textarea name="payload" hidden>{{ payload }}</textarea>
+        <button class="btn {{ 'btn-danger' if plan.mode == 'replace' else 'btn-primary' }}" type="submit">
+          {{ "Vervangen en importeren" if plan.mode == "replace" else "Importeren" }}
+        </button>
+        <a class="btn btn-ghost" href="/settings">Annuleren</a>
+      </form>
+    {% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>Configuratie</h2>
+  <p class="hint">Deze waarden komen uit het bestand <code>.env</code>. Na een wijziging herstart je met <code>docker compose up -d</code>.</p>
+  <dl class="config-list">
+    <div><dt>Materialen</dt><dd>{% for m in settings.materials %}<span class="badge badge-{{ m | lower }}">{{ m }}</span> {% endfor %}<code class="env">MATERIALS</code></dd></div>
+    <div><dt>Drempel "bijna op"</dt><dd>{{ settings.low_stock_threshold | pct }} <code class="env">LOW_STOCK_THRESHOLD</code></dd></div>
+    <div><dt>Standaardgewicht nieuwe spoel</dt><dd>{{ settings.default_weight_new | grams }} <code class="env">DEFAULT_WEIGHT_NEW</code></dd></div>
+    <div><dt>Database</dt><dd><code>{{ db_url }}</code></dd></div>
+    <div><dt>Schemaversie</dt><dd><code>{{ revision or "—" }}</code> · {{ count }} spoelen</dd></div>
+  </dl>
+</section>
+{% endblock %}

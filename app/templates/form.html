@@ -33,6 +33,13 @@
                value="{{ values.color_name }}" {% if errors.get('color_name') %}aria-invalid="true"{% endif %}>
         {{ err("color_name") }}
       </div>
+      <div class="field">
+        <label for="rfid">RFID <span class="muted">(optioneel)</span></label>
+        <input id="rfid" name="rfid" type="text" maxlength="64" autocomplete="off" spellcheck="false"
+               placeholder="Scan de tag of typ de UID, bv. 04:A3:1F:B2" value="{{ values.rfid or '' }}"
+               {% if errors.get('rfid') %}aria-invalid="true"{% endif %}>
+        {{ err("rfid") }}
+      </div>
       <label class="switch">
         <input type="checkbox" name="transparent" {% if values.transparent %}checked{% endif %}>
         <span class="switch-track"></span>
