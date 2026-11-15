@@ -15,7 +15,10 @@ for attempt in range(60):
         print("Database bereikbaar.")
         break
     except Exception as exc:  # noqa: BLE001
-        print(f"  nog niet bereikbaar ({attempt + 1}/60): {exc.__class__.__name__}")
+        reason = str(getattr(exc, "orig", exc)).strip().splitlines()
+        print(f"  nog niet bereikbaar ({attempt + 1}/60): {reason[0] if reason else exc.__class__.__name__}", flush=True)
+        if "password authentication failed" in " ".join(reason):
+            print("  -> Wachtwoord klopt niet. Is POSTGRES_PASSWORD gewijzigd nadat de database al was aangemaakt?", flush=True)
         time.sleep(2)
 else:
     sys.exit("Database niet bereikbaar, stoppen.")
